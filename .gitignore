@@ -1,0 +1,51 @@
+# --- Python build / cache ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+
+# --- OS / Editor junk ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.code-workspace
+
+# --- Logs & runtime artifacts ---
+logs/
+*.log
+uvicorn*.log
+
+# --- Test / coverage ---
+.coverage
+htmlcov/
+.pytest_cache/
+
+# --- Secrets & local config (DO NOT COMMIT) ---
+.env
+*.env
+.env.*
+.envrc
+service-account.json
+**/service-account.json
+
+# --- App-specific temporary files ---
+__write_check__.txt
+
+# --- Type checkers ---
+.mypy_cache/
+.pyright/
+.dmypy.json
+.pyre/
+
+# --- Node (if you ever add a front-end) ---
+node_modules/
