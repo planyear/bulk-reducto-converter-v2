@@ -2,16 +2,30 @@ import asyncio
 from typing import Dict, Any, List
 from .drive import list_folder_files, download_file_bytes, upload_text_file
 from .processors import office_to_pdf, reducto_clean_pdf, PDF_MIME
-from .util import extract_drive_folder_id, safe_basename
+from .util import extract_drive_folder_id
 from .config import settings
 import logging
+from datetime import datetime
+import re
+
+def make_output_name(src_name: str, suffix: str = "Reducto", ext: str = ".txt") -> str:
+    """
+    Turn 'foo.pdf' -> 'foo_Reducto_YYYY-MM-DD.txt'
+    Also strips/normalizes characters that Google Drive might not love.
+    """
+    # drop the original extension
+    stem = re.sub(r"\.[^.]+$", "", src_name)
+    # make a simple, safe-ish stem
+    stem = re.sub(r"[\\/<>:*?\"|]+", "_", stem).strip()  # replace forbidden-ish chars
+    today = datetime.now().strftime("%Y-%m-%d")
+    return f"{stem}_{suffix}_{today}{ext}"
 
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 MIME_OFFICE = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # docx
-    "application/msword",  # doc
-    "application/vnd.ms-excel",  # xls
+    "application/msword",
+    "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",  # xlsx
     "application/vnd.ms-excel.sheet.macroEnabled.12",  # xlsm
 }
@@ -44,7 +58,7 @@ async def _process_one(file: dict, out_folder_id: str) -> dict:
         cleaned = await reducto_clean_pdf(pdf_bytes)
         logger.info("REDUCTO OK id=%s text_len=%s", fid, len(cleaned))
 
-        out_name = safe_basename(name.rsplit(".", 1)[0]) + "_Reducto.txt"
+        out_name = make_output_name(name)
         out_id = upload_text_file(out_folder_id, out_name, cleaned)
         logger.info("UPLOAD OK id=%s -> out_file_id=%s out_name=%s", fid, out_id, out_name)
 

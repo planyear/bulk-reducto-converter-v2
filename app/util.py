@@ -25,8 +25,3 @@ def extract_drive_folder_id(url: str) -> str:
     if m:
         return m.group(1)
     raise ValueError(f"Could not parse Drive folder id from URL: {url}")
-
-
-def safe_basename(filename: str) -> str:
-    # Avoid path separators + trim
-    return re.sub(r"[\\/]+", "_", filename).strip()
