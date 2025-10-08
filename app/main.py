@@ -22,7 +22,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("bulk-reducto")
 
-app = FastAPI(title="Bulk Reducto Converter – Internal", docs_url=None, redoc_url=None)
+app = FastAPI(title="Bulk Reducto Converter", docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
 
 # ---- Auth routes (hidden from schema) ----
@@ -65,10 +65,3 @@ async def create_jobs(
     background.add_task(process_job, status["job_id"])
     return status
 
-
-@app.get("/jobs/{job_id}", tags=["Run"])
-async def job_status(job_id: str, user=Depends(require_user)):
-    try:
-        return get_status(job_id)
-    except KeyError:
-        raise HTTPException(404, "job not found")
