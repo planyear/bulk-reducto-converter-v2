@@ -21,3 +21,7 @@ requests==2.32.3
 
 # Async utilities
 anyio==4.4.0
+
+img2pdf==0.5.1
+reportlab==4.2.2
+Pillow==10.4.0
