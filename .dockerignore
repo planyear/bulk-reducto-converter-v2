@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+env/
+venv/
+
+# VCS / editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Logs & junk
+*.log
+.DS_Store
+
+# Local credentials
+service-account.json
+
+# Node / others (just in case)
+node_modules/
