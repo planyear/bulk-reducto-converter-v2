@@ -13,18 +13,19 @@ RUN apt-get update && \
       curl && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/app
+# Work inside /app
+WORKDIR /app
 
-# Copy and install Python deps
+# Install Python deps first (better layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app
+# Copy app code and start script
 COPY . .
+RUN chmod +x /app/start.sh
 
-# Environment (Render sets PORT)
+# Unbuffered logs
 ENV PYTHONUNBUFFERED=1
 
-# --- add these two lines ---
-ENTRYPOINT ["/opt/app/entrypoint.sh"]
-CMD ["python","-m","uvicorn","app.main:app","--host","0.0.0.0","--port","${PORT}","--proxy-headers","--forwarded-allow-ips","*"]
+# Start the app (shell not required; script is executable)
+CMD ["/app/start.sh"]

@@ -1,25 +1,9 @@
-# Python
+.git
+.venv
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
-*.egg-info/
-.venv/
-env/
-venv/
-
-# VCS / editor
-.git/
-.gitignore
-.vscode/
-.idea/
-
-# Logs & junk
-*.log
+.env
 .DS_Store
-
-# Local credentials
-service-account.json
-
-# Node / others (just in case)
-node_modules/
+# Keep start.sh and app code!
