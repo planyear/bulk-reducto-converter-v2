@@ -1,4 +1,4 @@
-from fastapi import BackgroundTasks, FastAPI, Depends, HTTPException, Request
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -11,7 +11,7 @@ from .auth import (
     swagger_ui,
 )
 from .models import JobRequest
-from .jobs import create_job, get_status, process_job
+from .jobs import create_job, get_status, process_job  # process_job is async
 
 import logging, sys
 
@@ -49,19 +49,31 @@ async def openapi(request: Request, user=Depends(require_user)):
     return app.openapi()
 
 # ---- Jobs ----
-# Only accept form fields (application/x-www-form-urlencoded or multipart/form-data)
+# Keep the HTTP connection open until the job is fully completed (including all uploads)
+# Accept form fields (application/x-www-form-urlencoded or multipart/form-data)
 @app.post("/jobs", tags=["Run"])
 async def create_jobs(
-    background: BackgroundTasks,
     req: JobRequest = Depends(JobRequest.as_form),
     user=Depends(require_user),
 ):
+    # 1) Create job record
     status = create_job(
         requested_by=user["email"],
         input_folder_url=str(req.input_folder_url),
         output_folder_url=str(req.output_folder_url),
     )
-    # fire-and-forget worker
-    background.add_task(process_job, status["job_id"])
-    return status
+    job_id = status["job_id"]
+    logger.info("Job %s created by %s", job_id, user["email"])
 
+    # 2) Run the job and WAIT here until EVERYTHING (including Drive uploads) is done
+    try:
+        # process_job is async -> await keeps the request open,
+        # so Swagger's spinner stays visible until completion.
+        await process_job(job_id)
+    except Exception as e:
+        logger.exception("Job %s failed: %s", job_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # 3) Return the final status/details AFTER completion
+    final_status = get_status(job_id)
+    return final_status
