@@ -73,11 +73,9 @@ def swagger_ui(request, user):
     return get_swagger_ui_html(
         openapi_url="/openapi.json",
         title="Bulk Reducto Converter",
-        # (optional) pin swagger-ui assets to a version:
         swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
         swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
         swagger_ui_parameters={
-            # 👇 hide the bottom "Schemas" section entirely
             "defaultModelsExpandDepth": -1
         },
     )

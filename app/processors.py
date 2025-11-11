@@ -6,6 +6,7 @@ import os
 import json
 import pathlib
 import tempfile
+import base64
 from typing import Optional, Dict, List, Any
 
 import httpx
@@ -39,6 +40,8 @@ def drive_export_pdf(service: Resource, file_id: str) -> bytes:
 PDF_MIME = "application/pdf"
 GOOGLE_MIME_PREFIX = "application/vnd.google-apps"
 
+XLSM_MIME = "application/vnd.ms-excel.sheet.macroenabled.12"
+
 OFFICE_MIMES = {
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -49,6 +52,7 @@ OFFICE_MIMES = {
     "application/vnd.oasis.opendocument.text",
     "application/vnd.oasis.opendocument.spreadsheet",
     "application/vnd.oasis.opendocument.presentation",
+    XLSM_MIME,
 }
 
 TEXT_LIKE = {
@@ -119,6 +123,88 @@ def _text_to_pdf(text_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
+async def _cloudconvert_office_to_pdf(
+    input_bytes: bytes,
+    input_name: str,
+    mime: str,
+) -> bytes:
+    """
+    Convert Office-ish files (including .xlsm) to PDF via CloudConvert.
+    Requires CLOUDCONVERT_API_KEY in settings.
+    """
+    if not settings.cloudconvert_api_key:
+        raise RuntimeError("CloudConvert API key is not configured")
+
+    api_key = settings.cloudconvert_api_key
+    b64_file = base64.b64encode(input_bytes).decode("ascii")
+
+    job_def = {
+        "tasks": {
+            "import-1": {
+                "operation": "import/base64",
+                "file": b64_file,
+                "filename": input_name,
+                "content_type": mime,
+            },
+            "convert-1": {
+                "operation": "convert",
+                "input": "import-1",
+                "output_format": "pdf",
+            },
+            "export-1": {
+                "operation": "export/url",
+                "input": "convert-1",
+            },
+        }
+    }
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    async with httpx.AsyncClient(timeout=300) as client:
+        # 1) create job
+        resp = await client.post(
+            "https://api.cloudconvert.com/v2/jobs",
+            json=job_def,
+            headers=headers,
+        )
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        job_id = data["id"]
+
+        # 2) poll until job is finished
+        while data.get("status") not in ("finished", "error"):
+            await asyncio.sleep(2)
+            poll = await client.get(
+                f"https://api.cloudconvert.com/v2/jobs/{job_id}",
+                headers=headers,
+                params={"include": "tasks"},
+            )
+            poll.raise_for_status()
+            data = poll.json()["data"]
+
+        if data.get("status") != "finished":
+            raise RuntimeError(f"CloudConvert job failed: {data}")
+
+        tasks = data.get("tasks", [])
+        export_tasks = [t for t in tasks if t.get("operation") == "export/url"]
+        if not export_tasks:
+            raise RuntimeError(f"No export/url task in CloudConvert job: {data}")
+
+        files = export_tasks[0].get("result", {}).get("files", [])
+        if not files:
+            raise RuntimeError(f"No files in CloudConvert export result: {export_tasks[0]}")
+
+        file_url = files[0]["url"]
+
+        # 3) download the resulting PDF
+        pdf_resp = await client.get(file_url)
+        pdf_resp.raise_for_status()
+        return pdf_resp.content
+
+
 async def to_pdf_bytes(
     *,
     name: str,
@@ -129,11 +215,11 @@ async def to_pdf_bytes(
 ) -> bytes:
     """
     Convert arbitrary content to PDF bytes.
-    - application/pdf            -> passthrough
-    - application/vnd.google-apps.* -> Drive export to PDF (requires drive_service + file_id)
-    - Office/OpenDocument mimes  -> LibreOffice (if available)
-    - image/*                    -> image -> PDF
-    - text/plain/csv/markdown    -> text -> PDF
+    - application/pdf                 -> passthrough
+    - application/vnd.google-apps.*   -> Drive export to PDF (requires drive_service + file_id)
+    - Office/OpenDocument mimes       -> CloudConvert (if configured) or LibreOffice
+    - image/*                         -> image -> PDF
+    - text/plain/csv/markdown         -> text -> PDF
     Raises RuntimeError if unsupported and cannot convert on this host.
     """
     if mime == PDF_MIME:
@@ -145,8 +231,15 @@ async def to_pdf_bytes(
         return drive_export_pdf(drive_service, drive_file_id)
 
     if mime in OFFICE_MIMES:
+        # Prefer CloudConvert if available
+        if settings.cloudconvert_api_key:
+            return await _cloudconvert_office_to_pdf(src_bytes, name, mime)
+
+        # Fallback: use LibreOffice if available locally
         if not _has_libreoffice():
-            raise RuntimeError("LibreOffice is not available on this host")
+            raise RuntimeError(
+                "LibreOffice is not available on this host and CloudConvert is not configured"
+            )
         return await _convert_with_libreoffice(src_bytes, name)
 
     if mime.startswith("image/"):
@@ -163,8 +256,12 @@ async def office_to_pdf(name: str, src_bytes: bytes, mime: str) -> bytes:
     if mime == PDF_MIME:
         return src_bytes
     if mime in OFFICE_MIMES:
+        if settings.cloudconvert_api_key:
+            return await _cloudconvert_office_to_pdf(src_bytes, name, mime)
         if not _has_libreoffice():
-            raise RuntimeError("LibreOffice is not available on this host")
+            raise RuntimeError(
+                "LibreOffice is not available on this host and CloudConvert is not configured"
+            )
         return await _convert_with_libreoffice(src_bytes, name)
     raise RuntimeError(f"office_to_pdf cannot handle mime={mime}")
 
