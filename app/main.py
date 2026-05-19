@@ -1,4 +1,6 @@
+import logging
 import shutil
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,13 +14,23 @@ from app.config import settings
 from app.jobs import process_batch
 from app.parsers import warmup_ocr
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True,
+)
+log = logging.getLogger(__name__)
+
 _FRONTEND = Path(__file__).parent.parent / "frontend"
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log.info("bulk-doc-converter starting (OCR=%s)", settings.OCR)
     warmup_ocr()
     yield
+    log.info("bulk-doc-converter shutting down")
 
 
 app = FastAPI(lifespan=lifespan, title="bulk-doc-converter")

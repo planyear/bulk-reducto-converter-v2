@@ -5,10 +5,6 @@ services:
     plan: standard
     healthCheckPath: /health
     autoDeploy: true
-    disk:
-      name: docling-cache
-      mountPath: /root/.cache/docling
-      sizeGB: 1
     envVars:
       - key: OCR
         value: docling
@@ -20,3 +16,5 @@ services:
         value: "209715200"
       - key: MAX_FILES_PER_JOB
         value: "50"
+      - key: PER_FILE_TIMEOUT_S
+        value: "300"

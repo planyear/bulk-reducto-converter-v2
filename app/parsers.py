@@ -1,28 +1,31 @@
+import logging
 import time
 from pathlib import Path
-from typing import Callable
 
 import httpx
 
 from app.config import settings
 
-_ASSETS = Path(__file__).parent / "assets"
-_WARMUP_PDF = _ASSETS / "warmup.pdf"
+log = logging.getLogger(__name__)
 
 _docling_converter = None
+
+
+def _build_docling_converter():
+    from docling.datamodel.base_models import InputFormat
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.document_converter import DocumentConverter, PdfFormatOption
+
+    opts = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
+    return DocumentConverter(
+        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)},
+    )
 
 
 def _get_docling_converter():
     global _docling_converter
     if _docling_converter is None:
-        from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions
-        from docling.document_converter import DocumentConverter, PdfFormatOption
-
-        opts = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
-        _docling_converter = DocumentConverter(
-            format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)},
-        )
+        _docling_converter = _build_docling_converter()
     return _docling_converter
 
 
@@ -78,17 +81,33 @@ def parse_pdf_like(path: Path) -> str:
         if md and md.strip():
             return md
         if settings.REDUCTO_API_KEY:
+            log.info("Docling produced no text for %s; falling back to Reducto", path.name)
             return parse_reducto(path)
         raise ValueError("no extractable text; set REDUCTO_API_KEY to enable OCR fallback")
     raise RuntimeError(f"unknown OCR backend: {settings.OCR!r}")
 
 
 def warmup_ocr() -> None:
-    if settings.OCR.lower() != "docling":
+    backend = settings.OCR.lower()
+    if backend == "reducto":
+        log.info("OCR backend: reducto (no local warmup needed)")
         return
-    if not _WARMUP_PDF.exists():
+    if backend != "docling":
+        log.warning("Unknown OCR backend: %r", settings.OCR)
         return
+
+    log.info("OCR backend: docling — verifying models")
+    started = time.monotonic()
     try:
-        parse_docling(_WARMUP_PDF)
+        from docling.utils.model_downloader import download_models
+
+        download_models()  # idempotent: no-op if models already present on disk
     except Exception:
-        pass
+        log.exception("Docling model download/verify failed; first PDF request will retry")
+        return
+
+    try:
+        _get_docling_converter()
+        log.info("Docling ready in %.1fs", time.monotonic() - started)
+    except Exception:
+        log.exception("Docling converter init failed; first PDF request will retry")

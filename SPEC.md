@@ -161,7 +161,7 @@ def parse_docling(path: Path) -> str:
     return result.document.export_to_markdown()
 ```
 
-The single `_converter` MUST be created during FastAPI's `lifespan` startup and warmed up by converting a small bundled `app/assets/warmup.pdf` once, so the first real request does not pay the model-load cost.
+The single `_converter` MUST be created during FastAPI's `lifespan` startup so the first real request does not pay the model-construction cost. Models themselves must already exist on disk — they are baked into the Docker image at build time (see §11.1) — so `download_models()` at startup is just an idempotent verification.
 
 **Fallback rule.** If `parse_docling(path)` returns an empty/whitespace-only string (scanned PDF, no text layer), the dispatcher attempts Reducto on that single file if `REDUCTO_API_KEY` is set. If the key is absent, raise:
 
@@ -346,6 +346,7 @@ class Settings(BaseSettings):
     REDUCTO_API_URL: str = "https://platform.reducto.ai"
     MAX_UPLOAD_BYTES: int = 209_715_200                 # 200 MiB
     MAX_FILES_PER_JOB: int = 50
+    PER_FILE_TIMEOUT_S: int = 300                       # per-file conversion budget
     PORT: int = 8000
 
 settings = Settings()
@@ -359,6 +360,7 @@ REDUCTO_API_KEY=
 REDUCTO_API_URL=https://platform.reducto.ai
 MAX_UPLOAD_BYTES=209715200
 MAX_FILES_PER_JOB=50
+PER_FILE_TIMEOUT_S=300
 PORT=8000
 ```
 
@@ -419,8 +421,8 @@ app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 `warmup_ocr()` in `app/parsers.py`:
 
-- When `OCR=docling`: instantiate the shared `DocumentConverter` and call `_converter.convert(Path("app/assets/warmup.pdf"))` once. The bundled `warmup.pdf` is a 1-page PDF with the literal text "warmup" — included in the repo.
-- When `OCR=reducto`: return immediately. No warmup needed.
+- When `OCR=docling`: call `docling.utils.model_downloader.download_models()` (idempotent — no-op if models are already cached on disk) and instantiate the shared `DocumentConverter`. Logs success/failure visibly. Failures don't crash the app — the first PDF request will retry — but they're surfaced loudly in stdout for Render's log viewer.
+- When `OCR=reducto`: log the choice and return immediately. No local warmup needed.
 
 ## 11. Frontend (`frontend/index.html`)
 
@@ -448,13 +450,13 @@ Style: plain CSS in a `<style>` tag, no external CDN dependencies.
 
 Hard rules — violating any of these will OOM the service:
 
-- **Concurrency = 1** in `process_batch`. Never `asyncio.gather` the conversion step.
+- **Concurrency = 1, process-wide.** A module-level `asyncio.Semaphore(1)` in `app/jobs.py` wraps every conversion call. Within a request, files run sequentially. Across requests, two simultaneous batches are serialized so two clients can never trigger two Docling parses in parallel.
 - **Stream uploads to disk** in 1 MiB chunks. Never accumulate the whole batch in a `list[bytes]`.
 - **Stream the zip output** to a temp file; return via `FileResponse` (never `BytesIO`).
 - **Reuse one `DocumentConverter`** instance for the process lifetime.
 - **Use `openpyxl` in `read_only=True, data_only=True` mode** for `.xlsx`.
-- **Pre-download Docling models at Docker build time** so cold start doesn't spike RAM from network + extraction at once.
-- **Per-file timeout** of 90 s, after which the file is recorded as failed and the loop proceeds.
+- **Bake Docling models into the Docker image at build time.** Do not use a Render persistent disk for the model cache — Render mounts overlay the path, hiding image-baked files on first deploy.
+- **Configurable per-file timeout** via `PER_FILE_TIMEOUT_S` env var (default 300 s). Generous enough to absorb Docling's first-call model load on top of a real parse.
 
 ## 13. Repository layout (create exactly these files)
 
@@ -476,8 +478,6 @@ bulk-reducto-converter-v2/
 │   ├── parsers.py                # §5 dispatcher + warmup_ocr
 │   ├── jobs.py                   # §6
 │   ├── packaging.py              # §7
-│   ├── assets/
-│   │   └── warmup.pdf            # 1-page PDF, literal text "warmup"
 │   └── handlers/
 │       ├── __init__.py
 │       ├── passthrough.py        # §4.1
@@ -487,7 +487,8 @@ bulk-reducto-converter-v2/
 │       ├── xlsx_.py              # §4.5
 │       └── ocr.py                # thin wrapper calling parsers.parse_pdf_like
 └── frontend/
-    └── index.html                # §11
+    ├── index.html                # §11
+    └── style.css                 # §11
 ```
 
 ## 14. Acceptance tests (definition of done)
@@ -523,8 +524,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-# Pre-download Docling models so cold start does not spike RAM with simultaneous network + model extraction.
-RUN python -c "from docling.utils.model_downloader import download_models; download_models()" || true
+# Bake Docling models into the image. The build fails loudly if download breaks —
+# we never want to ship an image that has to fetch ~258 MB of weights inside the
+# first user request.
+RUN python -c "from docling.utils.model_downloader import download_models; download_models()" \
+    && du -sh /root/.cache/docling \
+    && ls /root/.cache/docling/models
 
 COPY . .
 
@@ -543,10 +548,6 @@ services:
     plan: standard            # 2 GB RAM, 1 CPU
     healthCheckPath: /health
     autoDeploy: true
-    disk:
-      name: docling-cache
-      mountPath: /root/.cache/docling
-      sizeGB: 1
     envVars:
       - key: OCR
         value: docling
@@ -558,6 +559,8 @@ services:
         value: "209715200"
       - key: MAX_FILES_PER_JOB
         value: "50"
+      - key: PER_FILE_TIMEOUT_S
+        value: "300"
 ```
 
 ### 15.3 `requirements.txt` (pinned)
@@ -605,27 +608,26 @@ An implementer building from scratch:
 2. **Write `requirements.txt`, `.env.example`, `Dockerfile`, `render.yaml`, `start.sh`, `.dockerignore`** verbatim from §15.
 3. **Implement `app/config.py`** from §8.
 4. **Implement each handler in `app/handlers/`** from §4. One file per handler; each exports `convert(path: Path) -> str`.
-5. **Add `app/assets/warmup.pdf`** — any 1-page PDF with literal text (generate with any tool, commit to repo).
-6. **Implement `app/parsers.py`** with `parse_docling`, `parse_reducto`, and a dispatcher `parse_pdf_like(path)` that picks based on `settings.OCR`. Also export `warmup_ocr()` per §10.
-7. **Implement `app/handlers/ocr.py`** as a one-liner: `convert = parse_pdf_like` (or a thin wrapper).
-8. **Implement `app/routing.py`** from §9.
-9. **Implement `app/packaging.py`** from §7.
-10. **Implement `app/jobs.py`** from §6.
-11. **Implement `app/main.py`** from §10.
-12. **Build `frontend/index.html`** per §11.
-13. **Local smoke test:**
+5. **Implement `app/parsers.py`** with `parse_docling`, `parse_reducto`, and a dispatcher `parse_pdf_like(path)` that picks based on `settings.OCR`. Also export `warmup_ocr()` per §10. Use Python's `logging` module — never silently swallow Docling errors.
+6. **Implement `app/handlers/ocr.py`** as a one-liner: `convert = parse_pdf_like` (or a thin wrapper).
+7. **Implement `app/routing.py`** from §9.
+8. **Implement `app/packaging.py`** from §7.
+9. **Implement `app/jobs.py`** from §6 — including the module-level `asyncio.Semaphore(1)` and configurable timeout via `settings.PER_FILE_TIMEOUT_S`.
+10. **Implement `app/main.py`** from §10 — including `logging.basicConfig(... force=True)` so module loggers reach Render's log viewer.
+11. **Build `frontend/index.html` and `frontend/style.css`** per §11.
+12. **Local smoke test:**
     ```sh
     pip install -r requirements.txt
     cp .env.example .env
     uvicorn app.main:app --reload
     # then in a browser: http://localhost:8000
     ```
-14. **Docker smoke test:**
+13. **Docker smoke test:**
     ```sh
     docker build -t bulk-conv .
     docker run --rm -p 8000:8000 -e OCR=docling bulk-conv
     ```
-15. **Run the acceptance batch from §14.1** against the local server using `curl`:
+14. **Run the acceptance batch from §14.1** against the local server using `curl`:
     ```sh
     curl -sS -X POST http://localhost:8000/convert \
         -F "files=@sample.pdf" -F "files=@sample.docx" -F "files=@sample.xlsx" \
@@ -633,7 +635,7 @@ An implementer building from scratch:
         -o out.zip
     unzip -l out.zip
     ```
-16. **Deploy** by pushing the repo to GitHub and pointing Render at `render.yaml`. Verify `/health` returns the expected JSON and re-run the acceptance batch against the deployed URL.
+15. **Deploy** by pushing the repo to GitHub and pointing Render at `render.yaml`. Verify `/health` returns the expected JSON and re-run the acceptance batch against the deployed URL.
 
 ## 17. Error model
 

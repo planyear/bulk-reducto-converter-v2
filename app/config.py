@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     REDUCTO_API_URL: str = "https://platform.reducto.ai"
     MAX_UPLOAD_BYTES: int = 209_715_200
     MAX_FILES_PER_JOB: int = 50
+    PER_FILE_TIMEOUT_S: int = 300
     PORT: int = 8000
 
 

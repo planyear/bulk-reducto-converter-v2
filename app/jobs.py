@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import shutil
 import tempfile
@@ -10,9 +11,15 @@ from app.config import settings
 from app.packaging import build_zip
 from app.routing import HANDLERS
 
-CHUNK = 1 << 20  # 1 MiB
+log = logging.getLogger(__name__)
+
+CHUNK = 1 << 20  # 1 MiB upload chunk
 _SAFE = re.compile(r"[^A-Za-z0-9._-]+")
-PER_FILE_TIMEOUT_S = 90
+
+# Process-wide guard: only one conversion runs at a time across the whole
+# process. Keeps peak RSS predictable on Render Standard (2 GB / 1 CPU) when
+# two clients submit batches simultaneously.
+_CONVERSION_LOCK = asyncio.Semaphore(1)
 
 
 def _safe_stem(name: str) -> str:
@@ -31,6 +38,14 @@ def _unique(stem: str, used: set[str]) -> str:
     final = f"{stem}-{n}"
     used.add(final)
     return final
+
+
+async def _convert_one(handler, path: Path) -> str:
+    async with _CONVERSION_LOCK:
+        return await asyncio.wait_for(
+            asyncio.to_thread(handler, path),
+            timeout=settings.PER_FILE_TIMEOUT_S,
+        )
 
 
 async def process_batch(uploads: list[UploadFile]) -> tuple[Path, Path]:
@@ -59,6 +74,8 @@ async def process_batch(uploads: list[UploadFile]) -> tuple[Path, Path]:
                     f.write(chunk)
             staged.append((original, dest))
 
+        log.info("converting batch of %d file(s)", len(staged))
+
         used: set[str] = set()
         for original, path in staged:
             ext = path.suffix.lower()
@@ -67,15 +84,19 @@ async def process_batch(uploads: list[UploadFile]) -> tuple[Path, Path]:
                 errors.append((original, f"unsupported file type: {ext or '(none)'}"))
                 continue
             try:
-                md = await asyncio.wait_for(asyncio.to_thread(handler, path), timeout=PER_FILE_TIMEOUT_S)
+                md = await _convert_one(handler, path)
                 if not md or not md.strip():
                     raise ValueError("converter produced empty output")
                 final = _unique(_safe_stem(original), used)
                 (out / f"{final}.md").write_text(md, encoding="utf-8")
             except asyncio.TimeoutError:
-                errors.append((original, f"TimeoutError: exceeded {PER_FILE_TIMEOUT_S}s"))
+                msg = f"TimeoutError: exceeded {settings.PER_FILE_TIMEOUT_S}s"
+                log.warning("%s: %s", original, msg)
+                errors.append((original, msg))
             except Exception as e:
-                errors.append((original, f"{type(e).__name__}: {e}"))
+                msg = f"{type(e).__name__}: {e}"
+                log.warning("%s: %s", original, msg)
+                errors.append((original, msg))
 
         zip_path = build_zip(out, errors, tmp)
         return zip_path, tmp
