@@ -7,7 +7,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: OCR
-        value: reducto
+        sync: false
       - key: REDUCTO_API_URL
         value: https://api.reducto.ai
       - key: REDUCTO_API_KEY

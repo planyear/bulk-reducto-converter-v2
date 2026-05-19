@@ -1,0 +1,5 @@
+service,in_network_copay,out_of_network_copay
+primary_care,25,80
+specialist,50,150
+urgent_care,40,120
+emergency_room,300,300
