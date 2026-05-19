@@ -184,6 +184,10 @@ button:disabled {
   z-index: 1000;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .spinner {
   width: 48px;
   height: 48px;
