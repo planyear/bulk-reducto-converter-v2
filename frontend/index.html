@@ -3,53 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bulk Doc → Markdown Converter</title>
-  <style>
-    :root { color-scheme: light dark; }
-    * { box-sizing: border-box; }
-    body { font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 32px; max-width: 760px; margin-inline: auto; }
-    header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; }
-    h1 { font-size: 20px; margin: 0; }
-    .ocr { font-size: 12px; opacity: 0.7; }
-    #drop { border: 2px dashed #888; border-radius: 12px; padding: 48px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
-    #drop.over { border-color: #4a9eff; background: rgba(74,158,255,0.08); }
-    #drop p { margin: 0 0 8px; }
-    #drop input { display: none; }
-    .btn { display: inline-block; padding: 8px 16px; border-radius: 8px; border: 1px solid #888; background: transparent; cursor: pointer; font: inherit; }
-    .btn:hover { border-color: #4a9eff; }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    ul.files { list-style: none; padding: 0; margin: 16px 0; }
-    ul.files li { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid #ddd2; border-radius: 6px; margin-bottom: 6px; }
-    .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px; }
-    .status { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #8884; }
-    .status.uploading { background: #4a9eff44; }
-    .status.done      { background: #34c75944; }
-    .status.failed    { background: #ff453a44; }
-    .actions { display: flex; gap: 8px; margin-top: 16px; }
-    .banner { padding: 10px 14px; border-radius: 8px; background: #ff453a22; color: #c00; margin-top: 12px; display: none; white-space: pre-wrap; }
-    .banner.show { display: block; }
-  </style>
+  <title>Bulk Doc → Markdown</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <h1>Bulk Doc → Markdown</h1>
-    <span class="ocr" id="ocr-label">…</span>
-  </header>
+  <div class="container">
+    <header>
+      <h1>Bulk Doc → Markdown</h1>
+      <span class="ocr-tag" id="ocr-label">…</span>
+    </header>
 
-  <label id="drop">
-    <input type="file" id="picker" multiple>
-    <p><strong>Drop files here</strong> or click to choose</p>
-    <p style="font-size:12px;opacity:0.7">.pdf .docx .xlsx .csv .txt .md and common images</p>
-  </label>
+    <label class="drop" id="drop">
+      <input type="file" id="picker" multiple>
+      <p class="drop-title"><span class="accent">Drop files here</span> or click to choose</p>
+      <p class="drop-hint">.pdf .docx .xlsx .csv .txt .md and common images</p>
+    </label>
 
-  <ul class="files" id="files"></ul>
+    <ul class="files" id="files"></ul>
 
-  <div class="actions">
-    <button class="btn" id="convert" disabled>Convert</button>
-    <button class="btn" id="clear" disabled>Clear</button>
+    <div class="actions">
+      <button class="btn" id="clear" disabled>Clear</button>
+      <button class="btn primary" id="convert" disabled>Convert</button>
+    </div>
+
+    <div class="banner" id="banner"></div>
   </div>
-
-  <div class="banner" id="banner"></div>
 
 <script>
 const drop = document.getElementById('drop');
@@ -68,7 +46,7 @@ fetch('/health').then(r => r.json()).then(h => {
 
 function render() {
   list.innerHTML = '';
-  queue.forEach((item, i) => {
+  queue.forEach((item) => {
     const li = document.createElement('li');
     const name = document.createElement('span');
     name.className = 'name';
