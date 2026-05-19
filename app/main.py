@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 import sys
 from pathlib import Path
 
@@ -9,6 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .jobs import process_files
 from .packaging import build_zip, make_archive_name
+
+# python:3.11-slim has no /etc/mime.types, so .js falls back to text/plain
+# and browsers with strict MIME checking refuse to execute it.
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("text/html", ".html")
+mimetypes.add_type("image/svg+xml", ".svg")
 
 logging.basicConfig(
     level=logging.INFO,
