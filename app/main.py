@@ -1,6 +1,8 @@
+import asyncio
 import logging
 import mimetypes
 import sys
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -10,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .jobs import process_files
 from .packaging import build_zip, make_archive_name
+from .parsers import warmup_docling
 
 # python:3.11-slim has no /etc/mime.types, so .js falls back to text/plain
 # and browsers with strict MIME checking refuse to execute it.
@@ -30,6 +33,16 @@ app = FastAPI(title="Bulk Reducto Converter")
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
+
+
+@app.on_event("startup")
+async def _warmup() -> None:
+    if settings.ocr != "docling":
+        return
+    started = time.monotonic()
+    logger.info("warmup_docling: starting")
+    await asyncio.to_thread(warmup_docling)
+    logger.info("warmup_docling: ok in %.2fs", time.monotonic() - started)
 
 
 @app.get("/", include_in_schema=False)

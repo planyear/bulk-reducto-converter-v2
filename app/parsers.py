@@ -4,6 +4,7 @@ import json
 import logging
 import pathlib
 import tempfile
+import threading
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -13,6 +14,28 @@ from .config import settings
 logger = logging.getLogger("bulk-reducto.parsers")
 
 PDF_MIME = "application/pdf"
+
+_docling_converter = None
+_docling_lock = threading.Lock()
+
+
+def _get_docling_converter():
+    # Cache one DocumentConverter for the process and serialize its construction
+    # so we never hit the tqdm._lock race that happens when multiple threads
+    # trigger snapshot_download() concurrently inside DocumentConverter.__init__.
+    global _docling_converter
+    if _docling_converter is not None:
+        return _docling_converter
+    with _docling_lock:
+        if _docling_converter is None:
+            from docling.document_converter import DocumentConverter
+
+            _docling_converter = DocumentConverter()
+    return _docling_converter
+
+
+def warmup_docling() -> None:
+    _get_docling_converter()
 
 
 async def parse_pdf(pdf_bytes: bytes, source_name: str) -> str:
@@ -123,15 +146,13 @@ async def reducto_clean_pdf(pdf_bytes: bytes) -> str:
 
 
 def _docling_convert_sync(pdf_bytes: bytes, source_name: str) -> str:
-    # Lazy import so startup is fast when OCR=reducto.
-    from docling.document_converter import DocumentConverter
+    converter = _get_docling_converter()
 
     with tempfile.TemporaryDirectory() as td:
         suffix = "" if source_name.lower().endswith(".pdf") else ".pdf"
         path = pathlib.Path(td) / (source_name + suffix)
         path.write_bytes(pdf_bytes)
 
-        converter = DocumentConverter()
         result = converter.convert(str(path))
         return result.document.export_to_markdown()
 
