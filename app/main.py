@@ -1,19 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
-from starlette.middleware.sessions import SessionMiddleware
+import logging
+import sys
+from pathlib import Path
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .auth import (
-    require_user,
-    login as auth_login,
-    auth_callback as auth_cb,
-    logout as do_logout,
-    swagger_ui,
-)
-from .models import JobRequest
-from .jobs import create_job, get_status, process_job  # process_job is async
-
-import logging, sys
+from .jobs import process_files
+from .packaging import build_zip, make_archive_name
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,58 +17,73 @@ logging.basicConfig(
 )
 logger = logging.getLogger("bulk-reducto")
 
-app = FastAPI(title="Bulk Reducto Converter", docs_url=None, redoc_url=None)
-app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=False)
 
-# ---- Auth routes (hidden from schema) ----
-@app.get("/login", include_in_schema=False)
-async def login(request: Request, next: str | None = "/docs"):
-    return await auth_login(request, next)
+app = FastAPI(title="Bulk Reducto Converter")
 
-@app.get("/auth/callback", include_in_schema=False)
-async def auth_callback(request: Request):
-    return await auth_cb(request)
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
-@app.get("/logout", include_in_schema=False)
-async def logout(request: Request):
-    return do_logout(request)
 
-# ---- Protected Swagger (hidden from schema) ----
-@app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
-async def docs(request: Request, user=Depends(require_user)):
-    return swagger_ui(request, user)
+@app.get("/", include_in_schema=False)
+async def index():
+    return FileResponse(FRONTEND_DIR / "index.html", media_type="text/html")
 
-# Protect OpenAPI JSON too
-@app.get("/openapi.json", include_in_schema=False)
-async def openapi(request: Request, user=Depends(require_user)):
-    return app.openapi()
 
-# ---- Jobs ----
-# Keep the HTTP connection open until the job is fully completed (including all uploads)
-# Accept form fields (application/x-www-form-urlencoded or multipart/form-data)
-@app.post("/jobs", tags=["Run"])
-async def create_jobs(
-    req: JobRequest = Depends(JobRequest.as_form),
-    user=Depends(require_user),
-):
-    # 1) Create job record
-    status = create_job(
-        requested_by=user["email"],
-        input_folder_url=str(req.input_folder_url),
-        output_folder_url=str(req.output_folder_url),
+@app.get("/health")
+async def health():
+    return {"status": "ok", "ocr": settings.ocr}
+
+
+@app.post("/convert")
+async def convert(files: list[UploadFile] = File(...)):
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
+
+    items: list[tuple[str, str, bytes]] = []
+    total = 0
+    for f in files:
+        data = await f.read()
+        total += len(data)
+        if total > settings.max_upload_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Upload exceeds MAX_UPLOAD_BYTES ({settings.max_upload_bytes} bytes)",
+            )
+        items.append(
+            (
+                f.filename or "unnamed",
+                f.content_type or "application/octet-stream",
+                data,
+            )
+        )
+
+    logger.info(
+        "CONVERT received n=%s total_bytes=%s ocr=%s",
+        len(items),
+        total,
+        settings.ocr,
     )
-    job_id = status["job_id"]
-    logger.info("Job %s created by %s", job_id, user["email"])
 
-    # 2) Run the job and WAIT here until EVERYTHING (including Drive uploads) is done
     try:
-        # process_job is async -> await keeps the request open,
-        # so Swagger's spinner stays visible until completion.
-        await process_job(job_id)
+        results = await process_files(items)
     except Exception as e:
-        logger.exception("Job %s failed: %s", job_id, e)
+        logger.exception("Conversion run failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    # 3) Return the final status/details AFTER completion
-    final_status = get_status(job_id)
-    return final_status
+    zip_bytes = build_zip(results)
+    archive_name = make_archive_name()
+
+    logger.info(
+        "CONVERT done n=%s ok=%s errors=%s archive=%s size=%s",
+        len(results),
+        sum(1 for r in results if r.status == "ok"),
+        sum(1 for r in results if r.status == "error"),
+        archive_name,
+        len(zip_bytes),
+    )
+
+    return StreamingResponse(
+        iter([zip_bytes]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{archive_name}"'},
+    )

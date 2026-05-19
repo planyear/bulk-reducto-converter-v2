@@ -1,36 +1,31 @@
-from pydantic import BaseModel
 import os
 
 from dotenv import load_dotenv
+from pydantic import BaseModel
+
 load_dotenv()
 
+
 class Settings(BaseModel):
-    # App / auth
-    session_secret: str = os.getenv("SESSION_SECRET")
-    allowed_domain: str = os.getenv("ALLOWED_DOMAIN")
+    ocr: str = (os.getenv("OCR") or "reducto").strip().lower()
 
-
-    # Google OAuth for gating Swagger/UI
-    google_client_id: str | None = os.getenv("GOOGLE_CLIENT_ID")
-    google_client_secret: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
-
-
-    # Google Drive service account
-    service_account_json: str = os.getenv("SERVICE_ACCOUNT_JSON")
-    delegate_user: str | None = os.getenv("DELEGATE_USER")
-
-
-    # CloudConvert
     cloudconvert_api_key: str | None = os.getenv("CLOUDCONVERT_API_KEY")
 
-
-    # Reducto
-    reducto_api_url: str = os.getenv("REDUCTO_API_URL")
+    reducto_api_url: str | None = os.getenv("REDUCTO_API_URL")
     reducto_api_key: str | None = os.getenv("REDUCTO_API_KEY")
 
+    docling_do_ocr: bool = (os.getenv("DOCLING_DO_OCR") or "true").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
-    # Processing controls
     max_concurrency: int = int(os.getenv("MAX_CONCURRENCY", "5"))
+
+    max_upload_bytes: int = int(
+        os.getenv("MAX_UPLOAD_BYTES", str(200 * 1024 * 1024))
+    )
 
 
 settings = Settings()

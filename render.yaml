@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: bulk-reducto-converter
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: OCR
+        value: reducto
+      - key: REDUCTO_API_URL
+        value: https://api.reducto.ai
+      - key: REDUCTO_API_KEY
+        sync: false
+      - key: CLOUDCONVERT_API_KEY
+        sync: false
+      - key: DOCLING_DO_OCR
+        value: "true"
+      - key: MAX_CONCURRENCY
+        value: "5"
+      - key: MAX_UPLOAD_BYTES
+        value: "209715200"

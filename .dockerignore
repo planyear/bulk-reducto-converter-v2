@@ -6,4 +6,3 @@ __pycache__/
 *.pyd
 .env
 .DS_Store
-# Keep start.sh and app code!

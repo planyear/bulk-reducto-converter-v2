@@ -1,6 +1,6 @@
-# --- Python build / cache ---
+# Python
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
 *.pyd
 *.so
@@ -8,44 +8,33 @@ __pycache__/
 dist/
 build/
 
-# --- Virtual environments ---
+# Virtual environments
 .venv/
 venv/
 env/
 
-# --- OS / Editor junk ---
+# OS / IDE
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.code-workspace
 
-# --- Logs & runtime artifacts ---
+# Logs
 logs/
 *.log
 uvicorn*.log
 
-# --- Test / coverage ---
-.coverage
-htmlcov/
-.pytest_cache/
-
-# --- Secrets & local config (DO NOT COMMIT) ---
-.env
-*.env
-.env.*
-.envrc
-service-account.json
-**/service-account.json
-
-# --- App-specific temporary files ---
-__write_check__.txt
-
-# --- Type checkers ---
+# Type checkers / test caches
 .mypy_cache/
 .pyright/
 .dmypy.json
 .pyre/
+.pytest_cache/
 
-# --- Node (if you ever add a front-end) ---
-node_modules/
+# Secrets
+.env
+*.env
+.env.*
+.envrc
+!.env.example

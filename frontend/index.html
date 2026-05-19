@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bulk Reducto Converter</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <h1>Bulk Reducto Converter</h1>
+      <p class="sub">Drop files in, download a ZIP of Markdown out.</p>
+      <p class="badge" id="ocr-badge">OCR: …</p>
+    </header>
+
+    <section id="dropzone" class="dropzone" tabindex="0" aria-label="File drop zone">
+      <input id="picker" name="files" type="file" multiple hidden />
+      <p class="dz-text">
+        <strong>Drag &amp; drop</strong> files here, or
+        <button type="button" id="browse">browse</button>.
+      </p>
+      <p class="dz-hint">PDF, Word, Excel (incl. .xlsm), PowerPoint, images, .txt / .csv / .md</p>
+    </section>
+
+    <ul id="filelist" class="filelist" aria-live="polite"></ul>
+
+    <div class="actions">
+      <button id="convert" type="button" disabled>Convert &amp; download ZIP</button>
+      <button id="clear" type="button" class="ghost" disabled>Clear</button>
+    </div>
+
+    <div id="overlay" class="overlay" hidden>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="overlay-text">Converting your files…</p>
+    </div>
+
+    <div id="error" class="error" hidden role="alert"></div>
+  </main>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
