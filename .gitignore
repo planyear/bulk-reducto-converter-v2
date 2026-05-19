@@ -19,6 +19,7 @@ Thumbs.db
 .idea/
 .vscode/
 *.code-workspace
+*.swp
 
 # Logs
 logs/
@@ -31,6 +32,8 @@ uvicorn*.log
 .dmypy.json
 .pyre/
 .pytest_cache/
+.coverage
+htmlcov/
 
 # Secrets
 .env
@@ -38,3 +41,14 @@ uvicorn*.log
 .env.*
 .envrc
 !.env.example
+
+# Local converter output / scratch
+out.zip
+result.zip
+converted-*.zip
+.tmp/
+bulkconv-*/
+
+# Docling model cache if it lands in the repo by accident
+docling-cache/
+.cache/

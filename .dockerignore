@@ -1,8 +1,11 @@
 .git
-.venv
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+.gitignore
 .env
-.DS_Store
+__pycache__
+*.pyc
+tests/
+test_data/
+archive/
+.venv
+.vscode
+.idea

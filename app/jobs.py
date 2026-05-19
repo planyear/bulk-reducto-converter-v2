@@ -1,71 +1,85 @@
 import asyncio
-import logging
 import re
-from dataclasses import dataclass
-from typing import Iterable, Optional
+import shutil
+import tempfile
+from pathlib import Path
 
-from .config import settings
-from .parsers import parse_pdf
-from .processors import PDF_MIME, to_pdf_bytes
+from fastapi import HTTPException, UploadFile
 
-logger = logging.getLogger("bulk-reducto.jobs")
+from app.config import settings
+from app.packaging import build_zip
+from app.routing import HANDLERS
 
-
-@dataclass
-class FileResult:
-    source_name: str
-    output_name: str
-    status: str
-    content: Optional[bytes]
-    message: Optional[str]
+CHUNK = 1 << 20  # 1 MiB
+_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
+PER_FILE_TIMEOUT_S = 90
 
 
-def make_output_name(src_name: str, ext: str = ".md") -> str:
-    stem = re.sub(r"\.[^.]+$", "", src_name)
-    stem = re.sub(r"[\\/<>:*?\"|]+", "_", stem).strip()
-    return f"{stem}{ext}"
+def _safe_stem(name: str) -> str:
+    stem = Path(name).stem or "file"
+    cleaned = _SAFE.sub("_", stem)[:120]
+    return cleaned or "file"
 
 
-async def _process_one(name: str, mime: str, src_bytes: bytes) -> FileResult:
-    out_name = make_output_name(name)
-    logger.info("START name=%s mime=%s size=%s", name, mime, len(src_bytes))
+def _unique(stem: str, used: set[str]) -> str:
+    if stem not in used:
+        used.add(stem)
+        return stem
+    n = 2
+    while f"{stem}-{n}" in used:
+        n += 1
+    final = f"{stem}-{n}"
+    used.add(final)
+    return final
+
+
+async def process_batch(uploads: list[UploadFile]) -> tuple[Path, Path]:
+    if not uploads:
+        raise HTTPException(400, "no files provided")
+    if len(uploads) > settings.MAX_FILES_PER_JOB:
+        raise HTTPException(413, f"too many files (max {settings.MAX_FILES_PER_JOB})")
+
+    tmp = Path(tempfile.mkdtemp(prefix="bulkconv-"))
+    out = tmp / "out"
+    out.mkdir()
+    errors: list[tuple[str, str]] = []
 
     try:
-        pdf_bytes = await to_pdf_bytes(name=name, src_bytes=src_bytes, mime=mime)
-        if mime == PDF_MIME:
-            logger.info("PDF passthrough name=%s size=%s", name, len(pdf_bytes))
-        else:
-            logger.info("CONVERTED -> PDF name=%s pdf_size=%s", name, len(pdf_bytes))
+        staged: list[tuple[str, Path]] = []
+        total = 0
+        for u in uploads:
+            original = u.filename or f"file_{len(staged):03d}"
+            ext = Path(original).suffix.lower()
+            dest = tmp / f"in_{len(staged):03d}_{_safe_stem(original)}{ext}"
+            with dest.open("wb") as f:
+                while chunk := await u.read(CHUNK):
+                    total += len(chunk)
+                    if total > settings.MAX_UPLOAD_BYTES:
+                        raise HTTPException(413, "batch exceeds MAX_UPLOAD_BYTES")
+                    f.write(chunk)
+            staged.append((original, dest))
 
-        markdown = await parse_pdf(pdf_bytes, name)
-        logger.info("PARSED name=%s md_len=%s", name, len(markdown))
+        used: set[str] = set()
+        for original, path in staged:
+            ext = path.suffix.lower()
+            handler = HANDLERS.get(ext)
+            if handler is None:
+                errors.append((original, f"unsupported file type: {ext or '(none)'}"))
+                continue
+            try:
+                md = await asyncio.wait_for(asyncio.to_thread(handler, path), timeout=PER_FILE_TIMEOUT_S)
+                if not md or not md.strip():
+                    raise ValueError("converter produced empty output")
+                final = _unique(_safe_stem(original), used)
+                (out / f"{final}.md").write_text(md, encoding="utf-8")
+            except asyncio.TimeoutError:
+                errors.append((original, f"TimeoutError: exceeded {PER_FILE_TIMEOUT_S}s"))
+            except Exception as e:
+                errors.append((original, f"{type(e).__name__}: {e}"))
 
-        return FileResult(
-            source_name=name,
-            output_name=out_name,
-            status="ok",
-            content=markdown.encode("utf-8"),
-            message=None,
-        )
-    except Exception as e:
-        logger.exception("ERROR processing name=%s", name)
-        return FileResult(
-            source_name=name,
-            output_name=out_name,
-            status="error",
-            content=None,
-            message=str(e),
-        )
+        zip_path = build_zip(out, errors, tmp)
+        return zip_path, tmp
 
-
-async def process_files(
-    items: Iterable[tuple[str, str, bytes]],
-) -> list[FileResult]:
-    items = list(items)
-    sem = asyncio.Semaphore(int(settings.max_concurrency or 1))
-
-    async def bounded(name: str, mime: str, data: bytes) -> FileResult:
-        async with sem:
-            return await _process_one(name, mime, data)
-
-    return list(await asyncio.gather(*[bounded(n, m, d) for (n, m, d) in items]))
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise

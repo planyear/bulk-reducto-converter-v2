@@ -1,22 +1,22 @@
 services:
   - type: web
-    name: bulk-reducto-converter
+    name: bulk-doc-converter
     runtime: docker
-    plan: starter
-    dockerfilePath: ./Dockerfile
+    plan: standard
     healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: docling-cache
+      mountPath: /root/.cache/docling
+      sizeGB: 1
     envVars:
       - key: OCR
-        sync: false
-      - key: REDUCTO_API_URL
-        value: https://api.reducto.ai
+        value: docling
       - key: REDUCTO_API_KEY
         sync: false
-      - key: CLOUDCONVERT_API_KEY
-        sync: false
-      - key: DOCLING_DO_OCR
-        value: "true"
-      - key: MAX_CONCURRENCY
-        value: "5"
+      - key: REDUCTO_API_URL
+        value: https://platform.reducto.ai
       - key: MAX_UPLOAD_BYTES
         value: "209715200"
+      - key: MAX_FILES_PER_JOB
+        value: "50"

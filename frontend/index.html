@@ -1,43 +1,142 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Bulk Reducto Converter</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bulk Doc → Markdown Converter</title>
+  <style>
+    :root { color-scheme: light dark; }
+    * { box-sizing: border-box; }
+    body { font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; margin: 0; padding: 32px; max-width: 760px; margin-inline: auto; }
+    header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 24px; }
+    h1 { font-size: 20px; margin: 0; }
+    .ocr { font-size: 12px; opacity: 0.7; }
+    #drop { border: 2px dashed #888; border-radius: 12px; padding: 48px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+    #drop.over { border-color: #4a9eff; background: rgba(74,158,255,0.08); }
+    #drop p { margin: 0 0 8px; }
+    #drop input { display: none; }
+    .btn { display: inline-block; padding: 8px 16px; border-radius: 8px; border: 1px solid #888; background: transparent; cursor: pointer; font: inherit; }
+    .btn:hover { border-color: #4a9eff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    ul.files { list-style: none; padding: 0; margin: 16px 0; }
+    ul.files li { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid #ddd2; border-radius: 6px; margin-bottom: 6px; }
+    .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin-right: 12px; }
+    .status { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #8884; }
+    .status.uploading { background: #4a9eff44; }
+    .status.done      { background: #34c75944; }
+    .status.failed    { background: #ff453a44; }
+    .actions { display: flex; gap: 8px; margin-top: 16px; }
+    .banner { padding: 10px 14px; border-radius: 8px; background: #ff453a22; color: #c00; margin-top: 12px; display: none; white-space: pre-wrap; }
+    .banner.show { display: block; }
+  </style>
 </head>
 <body>
-  <main class="shell">
-    <header class="hero">
-      <h1>Bulk Reducto Converter</h1>
-      <p class="sub">Drop files in, download a ZIP of Markdown out.</p>
-      <p class="badge" id="ocr-badge">OCR: …</p>
-    </header>
+  <header>
+    <h1>Bulk Doc → Markdown</h1>
+    <span class="ocr" id="ocr-label">…</span>
+  </header>
 
-    <section id="dropzone" class="dropzone" tabindex="0" aria-label="File drop zone">
-      <input id="picker" name="files" type="file" multiple hidden />
-      <p class="dz-text">
-        <strong>Drag &amp; drop</strong> files here, or
-        <button type="button" id="browse">browse</button>.
-      </p>
-      <p class="dz-hint">PDF, images, .txt / .csv / .md</p>
-    </section>
+  <label id="drop">
+    <input type="file" id="picker" multiple>
+    <p><strong>Drop files here</strong> or click to choose</p>
+    <p style="font-size:12px;opacity:0.7">.pdf .docx .xlsx .csv .txt .md and common images</p>
+  </label>
 
-    <ul id="filelist" class="filelist" aria-live="polite"></ul>
+  <ul class="files" id="files"></ul>
 
-    <div class="actions">
-      <button id="convert" type="button" disabled>Convert &amp; download ZIP</button>
-      <button id="clear" type="button" class="ghost" disabled>Clear</button>
-    </div>
+  <div class="actions">
+    <button class="btn" id="convert" disabled>Convert</button>
+    <button class="btn" id="clear" disabled>Clear</button>
+  </div>
 
-    <div id="overlay" class="overlay" hidden>
-      <div class="spinner" aria-hidden="true"></div>
-      <p class="overlay-text">Converting your files…</p>
-    </div>
+  <div class="banner" id="banner"></div>
 
-    <div id="error" class="error" hidden role="alert"></div>
-  </main>
+<script>
+const drop = document.getElementById('drop');
+const picker = document.getElementById('picker');
+const list = document.getElementById('files');
+const convertBtn = document.getElementById('convert');
+const clearBtn = document.getElementById('clear');
+const banner = document.getElementById('banner');
+const ocrLabel = document.getElementById('ocr-label');
 
-  <script src="/static/app.js" defer></script>
+let queue = [];
+
+fetch('/health').then(r => r.json()).then(h => {
+  ocrLabel.textContent = `OCR: ${h.ocr}`;
+}).catch(() => { ocrLabel.textContent = ''; });
+
+function render() {
+  list.innerHTML = '';
+  queue.forEach((item, i) => {
+    const li = document.createElement('li');
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = item.file.name;
+    const status = document.createElement('span');
+    status.className = `status ${item.status}`;
+    status.textContent = item.status;
+    li.append(name, status);
+    list.appendChild(li);
+  });
+  convertBtn.disabled = queue.length === 0 || queue.some(q => q.status === 'uploading');
+  clearBtn.disabled = queue.length === 0;
+}
+
+function addFiles(fileList) {
+  for (const file of fileList) {
+    queue.push({ file, status: 'pending' });
+  }
+  render();
+}
+
+picker.addEventListener('change', e => addFiles(e.target.files));
+
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('over');
+}));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('over');
+}));
+drop.addEventListener('drop', e => {
+  if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files);
+});
+
+clearBtn.addEventListener('click', () => {
+  queue = [];
+  banner.classList.remove('show');
+  render();
+});
+
+convertBtn.addEventListener('click', async () => {
+  banner.classList.remove('show');
+  const form = new FormData();
+  queue.forEach(q => { q.status = 'uploading'; form.append('files', q.file); });
+  render();
+
+  try {
+    const res = await fetch('/convert', { method: 'POST', body: form });
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); msg = j.error || msg; } catch {}
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `converted-${stamp}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    queue.forEach(q => q.status = 'done');
+  } catch (err) {
+    queue.forEach(q => { if (q.status === 'uploading') q.status = 'failed'; });
+    banner.textContent = String(err.message || err);
+    banner.classList.add('show');
+  } finally {
+    render();
+  }
+});
+</script>
 </body>
 </html>

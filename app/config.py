@@ -1,31 +1,15 @@
-import os
-
-from dotenv import load_dotenv
-from pydantic import BaseModel
-
-load_dotenv()
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseModel):
-    ocr: str = (os.getenv("OCR") or "reducto").strip().lower()
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    cloudconvert_api_key: str | None = os.getenv("CLOUDCONVERT_API_KEY")
-
-    reducto_api_url: str | None = os.getenv("REDUCTO_API_URL")
-    reducto_api_key: str | None = os.getenv("REDUCTO_API_KEY")
-
-    docling_do_ocr: bool = (os.getenv("DOCLING_DO_OCR") or "true").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-
-    max_concurrency: int = int(os.getenv("MAX_CONCURRENCY", "5"))
-
-    max_upload_bytes: int = int(
-        os.getenv("MAX_UPLOAD_BYTES", str(200 * 1024 * 1024))
-    )
+    OCR: str = "docling"
+    REDUCTO_API_KEY: str = ""
+    REDUCTO_API_URL: str = "https://platform.reducto.ai"
+    MAX_UPLOAD_BYTES: int = 209_715_200
+    MAX_FILES_PER_JOB: int = 50
+    PORT: int = 8000
 
 
 settings = Settings()
