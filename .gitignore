@@ -52,3 +52,10 @@ bulkconv-*/
 # Docling model cache if it lands in the repo by accident
 docling-cache/
 .cache/
+
+# Agent files
+.agents/
+.agents/*
+skills-lock.json
+.claude/
+.claude/*

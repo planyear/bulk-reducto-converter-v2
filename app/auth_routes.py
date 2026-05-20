@@ -133,18 +133,18 @@ def auth_callback(request: Request):
 @router.post("/logout")
 def logout(request: Request):
     sealed = request.cookies.get(SESSION_COOKIE_NAME)
-    fallback = settings.APP_BASE_URL.rstrip("/") + "/sign-in"
-    target = fallback
+    return_to = settings.APP_BASE_URL.rstrip("/") + "/sign-in"
+    target = return_to
     if sealed:
         try:
             session = get_workos_client().user_management.load_sealed_session(
                 session_data=sealed,
                 cookie_password=settings.WORKOS_COOKIE_PASSWORD,
             )
-            target = session.get_logout_url()
+            target = session.get_logout_url(return_to=return_to)
         except Exception as exc:
             log.info("logout: could not load session, falling back: %s", exc)
-            target = fallback
+            target = return_to
 
     response = RedirectResponse(url=target, status_code=status.HTTP_302_FOUND)
     response.delete_cookie(SESSION_COOKIE_NAME)

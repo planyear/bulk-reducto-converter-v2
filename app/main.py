@@ -5,12 +5,12 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
-from app.auth import get_authenticated_user
+from app.auth import SESSION_COOKIE_NAME, get_authenticated_user
 from app.auth_routes import router as auth_router
 from app.config import settings
 from app.jobs import process_batch
@@ -45,11 +45,33 @@ def health():
 
 
 @app.get("/")
-def index(user: dict = Depends(get_authenticated_user)):
+def index(request: Request):
+    # Explicit redirect (does not depend on Accept header) so that a fresh
+    # browser visit on Render — where the proxy might normalize headers —
+    # always lands on the branded /sign-in page when unauthenticated.
+    if not request.cookies.get(SESSION_COOKIE_NAME):
+        return RedirectResponse(url="/sign-in", status_code=302)
+    try:
+        get_authenticated_user(request)
+    except HTTPException:
+        # Cookie present but invalid/expired/tampered → clear it and send to sign-in.
+        response = RedirectResponse(url="/sign-in", status_code=302)
+        response.delete_cookie(SESSION_COOKIE_NAME)
+        return response
     return FileResponse(_FRONTEND / "index.html")
 
 
-app.mount("/static", StaticFiles(directory=str(_FRONTEND)), name="static")
+class _AssetsOnly(StaticFiles):
+    """Static mount that refuses to serve HTML — index.html and login.html
+    must only be reachable through their authenticated FastAPI routes."""
+
+    async def get_response(self, path, scope):
+        if path.lower().endswith(".html"):
+            return Response(status_code=404)
+        return await super().get_response(path, scope)
+
+
+app.mount("/static", _AssetsOnly(directory=str(_FRONTEND)), name="static")
 
 
 @app.post("/convert")
@@ -67,8 +89,15 @@ async def convert(
     )
 
 
+_JSON_API_PATHS = {"/convert", "/me"}
+
+
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc: HTTPException):
-    if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
+async def http_exception_handler(request: Request, exc: HTTPException):
+    # 401 on a JSON-API path → JSON 401 (frontend handles the redirect).
+    # 401 on any other path → 302 to /sign-in so a plain browser visit always
+    # lands on the branded sign-in page, regardless of Accept header (which
+    # some reverse proxies may normalize).
+    if exc.status_code == 401 and request.url.path not in _JSON_API_PATHS:
         return RedirectResponse(url="/sign-in", status_code=302)
     return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
