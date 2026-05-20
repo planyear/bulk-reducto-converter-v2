@@ -18,3 +18,15 @@ services:
         value: "50"
       - key: PER_FILE_TIMEOUT_S
         value: "300"
+      - key: WORKOS_API_KEY
+        sync: false
+      - key: WORKOS_CLIENT_ID
+        sync: false
+      - key: WORKOS_REDIRECT_URI
+        sync: false
+      - key: WORKOS_COOKIE_PASSWORD
+        sync: false
+      - key: WORKOS_DEFAULT_ORG_ID
+        sync: false
+      - key: APP_BASE_URL
+        sync: false

@@ -12,5 +12,12 @@ class Settings(BaseSettings):
     PER_FILE_TIMEOUT_S: int = 300
     PORT: int = 8000
 
+    WORKOS_API_KEY: str = ""
+    WORKOS_CLIENT_ID: str = ""
+    WORKOS_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
+    WORKOS_COOKIE_PASSWORD: str = ""
+    WORKOS_DEFAULT_ORG_ID: str = ""
+    APP_BASE_URL: str = "http://localhost:8000"
+
 
 settings = Settings()

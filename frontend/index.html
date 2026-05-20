@@ -11,6 +11,8 @@
     <header>
       <h1>Bulk Doc → Markdown</h1>
       <span class="ocr-tag" id="ocr-label">…</span>
+      <span class="user-info" id="user-info" hidden></span>
+      <a class="btn" id="logout-link" href="/logout" hidden>Logout</a>
     </header>
 
     <label class="drop" id="drop">
@@ -43,6 +45,15 @@ let queue = [];
 fetch('/health').then(r => r.json()).then(h => {
   ocrLabel.textContent = `OCR: ${h.ocr}`;
 }).catch(() => { ocrLabel.textContent = ''; });
+
+fetch('/me').then(r => r.ok ? r.json() : null).then(u => {
+  if (!u) return;
+  const info = document.getElementById('user-info');
+  const link = document.getElementById('logout-link');
+  info.textContent = u.email || 'Signed in';
+  info.hidden = false;
+  link.hidden = false;
+}).catch(() => {});
 
 function render() {
   list.innerHTML = '';
@@ -94,6 +105,10 @@ convertBtn.addEventListener('click', async () => {
 
   try {
     const res = await fetch('/convert', { method: 'POST', body: form });
+    if (res.status === 401) {
+      window.location.href = '/sign-in';
+      return;
+    }
     if (!res.ok) {
       let msg = `HTTP ${res.status}`;
       try { const j = await res.json(); msg = j.error || msg; } catch {}

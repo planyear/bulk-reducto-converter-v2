@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in — Bulk Doc → Markdown</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Bulk Doc → Markdown</h1>
+    </header>
+
+    <section class="auth-card">
+      <p class="auth-lede">Sign in to convert your documents.</p>
+
+      <a class="btn primary auth-primary" href="/login">Continue with WorkOS</a>
+
+      <div class="auth-divider"><span>or sign in to another organization</span></div>
+
+      <form method="get" action="/login" class="auth-form">
+        <label for="org-email">Work email</label>
+        <input id="org-email" name="email" type="email" placeholder="you@company.com" autocomplete="email">
+        <button class="btn auth-secondary" type="submit">Sign in with SSO</button>
+      </form>
+
+      <p class="auth-hint">By signing in you agree to your organization's terms.</p>
+    </section>
+
+    <div class="banner" id="banner"></div>
+  </div>
+
+  <script>
+    const err = new URLSearchParams(location.search).get("error");
+    if (err) {
+      const b = document.getElementById("banner");
+      const map = {
+        auth_failed: "We couldn't complete sign-in. Please try again.",
+        signin_consent_denied: "Sign-in was cancelled.",
+      };
+      b.textContent = map[err] || ("Sign-in error: " + err);
+      b.classList.add("show");
+    }
+  </script>
+</body>
+</html>

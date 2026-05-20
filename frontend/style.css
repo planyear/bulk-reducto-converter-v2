@@ -219,3 +219,100 @@ h1 {
 }
 
 .banner.show { display: block; }
+
+.auth-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  box-shadow: var(--shadow);
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.auth-lede {
+  margin: 0 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.auth-primary {
+  display: block;
+  width: 100%;
+  text-align: center;
+  text-decoration: none;
+  padding: 12px 20px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 24px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.auth-divider span { white-space: nowrap; }
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.auth-form { display: flex; flex-direction: column; gap: 8px; }
+.auth-form label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.auth-form input[type="email"] {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.auth-form input[type="email"]:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.auth-secondary {
+  margin-top: 4px;
+  width: 100%;
+}
+
+.auth-hint {
+  margin: 20px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.user-info {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+header .btn {
+  padding: 6px 14px;
+  font-size: 13px;
+}

@@ -5,11 +5,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
 
+from app.auth import get_authenticated_user
+from app.auth_routes import router as auth_router
 from app.config import settings
 from app.jobs import process_batch
 from app.parsers import warmup_ocr
@@ -34,6 +36,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan, title="bulk-doc-converter")
+app.include_router(auth_router)
 
 
 @app.get("/health")
@@ -42,7 +45,7 @@ def health():
 
 
 @app.get("/")
-def index():
+def index(user: dict = Depends(get_authenticated_user)):
     return FileResponse(_FRONTEND / "index.html")
 
 
@@ -50,7 +53,10 @@ app.mount("/static", StaticFiles(directory=str(_FRONTEND)), name="static")
 
 
 @app.post("/convert")
-async def convert(files: list[UploadFile] = File(...)):
+async def convert(
+    files: list[UploadFile] = File(...),
+    user: dict = Depends(get_authenticated_user),
+):
     zip_path, tmp = await process_batch(files)
     stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%SZ")
     return FileResponse(
@@ -63,4 +69,6 @@ async def convert(files: list[UploadFile] = File(...)):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
+    if exc.status_code == 401 and "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse(url="/sign-in", status_code=302)
     return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
