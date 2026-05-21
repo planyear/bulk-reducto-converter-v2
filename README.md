@@ -32,13 +32,16 @@ Render dashboard → Environment. `sync: false` entries from [render.yaml](rende
 | `MAX_UPLOAD_BYTES` | `209715200` (200 MiB) | Cumulative batch cap. |
 | `MAX_FILES_PER_JOB` | `50` | Per-request file count cap. |
 | `PER_FILE_TIMEOUT_S` | `300` | Per-file conversion timeout. |
-| `PORT` | `8000` | Bind port (Render sets this automatically). |
 | `WORKOS_API_KEY` | — | Secret API key (`sk_test_...` or `sk_live_...`) from the WorkOS Dashboard. |
 | `WORKOS_CLIENT_ID` | — | Application Client ID (`client_...`) from the WorkOS Dashboard. |
 | `WORKOS_REDIRECT_URI` | — | `https://<your-svc>.onrender.com/auth/callback`. Must match the Dashboard exactly. |
 | `WORKOS_COOKIE_PASSWORD` | — | ≥ 32 char random secret used to seal session cookies. Identical across instances. |
 | `WORKOS_DEFAULT_ORG_ID` | — | When set, `/login` auto-routes to that org's SSO. Leave empty for the generic AuthKit page. |
 | `APP_BASE_URL` | — | `https://<your-svc>.onrender.com`. The `https://` prefix drives the cookie `secure` flag. |
+
+Render sets `$PORT` on the container automatically — `start.sh` reads it directly, so there is no `PORT` setting in the app config.
+
+Every response carries `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and `Referrer-Policy: same-origin` as defense-in-depth.
 
 ## Supported file types
 
@@ -56,3 +59,12 @@ Render dashboard → Environment. `sync: false` entries from [render.yaml](rende
 | `GET /` | Gated | Drag-and-drop UI. Unauthenticated → 302 to `/sign-in`. |
 | `POST /convert` | Gated | Conversion API. Unauthenticated → 401 JSON. |
 | `GET /me` | Gated | Returns the signed-in user dict. 401 JSON when unauthenticated. |
+
+## Roles & UI behavior
+
+WorkOS may return a `role` (and `roles`) on the authenticated session — these flow through `/me`. The frontend uses them for cosmetic affordances only:
+
+- A role badge in the header (for any non-empty role).
+- The dark-mode toggle in the footer is shown when `role === "admin"`.
+
+There is no server-side RBAC. Any authenticated user can convert documents — `/convert` is a binary signed-in gate. Treat the admin badge as a hint, not a permission. If you ever need to gate the conversion endpoint by role, update SPEC.md §18 in the same change.

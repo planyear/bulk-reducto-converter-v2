@@ -59,6 +59,10 @@ Why not local uvicorn? The WorkOS Redirect URI registered in the Dashboard, the 
 
 - **Docling models are baked into the Docker image** at build time (see [Dockerfile](Dockerfile)). The build is slow (~258 MB download) but cold starts are fast.
 
+- **RBAC is UI-only.** `/me` returns `role` and `roles` from the WorkOS sealed session and the frontend uses them to gate the header badge and the dark-mode toggle (`role === "admin"`). `/convert` does NOT check role — anyone signed in can convert. If you ever wire server-side RBAC, update SPEC.md §18 in the same commit.
+
+- **Security headers** are set by a single middleware in [app/main.py](app/main.py): `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`. CSP and HSTS are intentionally NOT set here — CSP would block the inline `<script>` blocks in [frontend/index.html](frontend/index.html), and HSTS belongs at Render's edge.
+
 ## Environment
 
 Settings are pydantic-settings backed; see [app/config.py](app/config.py). All production values live in the Render dashboard (Environment tab) with `sync: false` per [render.yaml](render.yaml). [.env.example](.env.example) documents every variable.

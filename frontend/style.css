@@ -41,6 +41,11 @@
 
 * { box-sizing: border-box; }
 
+/* Restore the HTML `hidden` attribute. Author rules like `.page-footer
+   { display: flex }` would otherwise out-specificity the UA stylesheet and
+   leave a hidden element visible. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;

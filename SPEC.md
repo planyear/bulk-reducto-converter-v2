@@ -350,10 +350,11 @@ class Settings(BaseSettings):
     MAX_UPLOAD_BYTES: int = 209_715_200                 # 200 MiB
     MAX_FILES_PER_JOB: int = 50
     PER_FILE_TIMEOUT_S: int = 300                       # per-file conversion budget
-    PORT: int = 8000
 
 settings = Settings()
 ```
+
+There is no `PORT` setting in `Settings`. The container's bind port comes from the `$PORT` env var, read directly by `start.sh` (Render sets it automatically).
 
 `.env.example` (committed to repo):
 
@@ -364,7 +365,6 @@ REDUCTO_API_URL=https://platform.reducto.ai
 MAX_UPLOAD_BYTES=209715200
 MAX_FILES_PER_JOB=50
 PER_FILE_TIMEOUT_S=300
-PORT=8000
 ```
 
 ## 9. Routing table (`app/routing.py`)
@@ -549,8 +549,7 @@ FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    DOCLING_ARTIFACTS_PATH=/root/.cache/docling
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
 WORKDIR /app
 
@@ -575,6 +574,8 @@ ENV PORT=8000
 EXPOSE 8000
 CMD ["sh", "start.sh"]
 ```
+
+Docling's default model cache is `$HOME/.cache/docling`, which lines up with where `download_models()` writes during the build (the image runs as root, so `$HOME` is `/root`), so no explicit `DOCLING_ARTIFACTS_PATH` env var is needed at runtime.
 
 ### 15.2 `render.yaml`
 
@@ -700,7 +701,8 @@ An implementer building from scratch:
 ## 18. Explicitly out of scope
 
 - Persistent job queue, polling, SSE progress, websockets.
-- Per-user quotas, role-based access control, multi-tenant data isolation. Authentication itself IS in scope (§19) but only as a binary "signed in or not" gate.
+- Per-user quotas and multi-tenant data isolation. Authentication itself IS in scope (§19) but `/convert` is only a binary "signed in or not" gate.
+- Server-side RBAC enforcement on `/convert`. The `role` and `roles` fields exposed through `/me` are informational only — the UI uses `role === "admin"` to show the dark-mode toggle, but the conversion endpoint does not check role. Treat the admin badge as a cosmetic affordance, not a permission.
 - Output formats other than Markdown.
 - Any OCR engine other than Docling (local) and Reducto (hosted).
 - Office formats outside `.docx` / `.xlsx` / `.xlsm`.
@@ -763,8 +765,12 @@ def get_authenticated_user(request: Request) -> dict:
         "first_name": auth.user.first_name,
         "last_name": auth.user.last_name,
         "organization_id": getattr(auth, "organization_id", None),
+        "role": getattr(auth, "role", None),
+        "roles": list(getattr(auth, "roles", None) or []),
     }
 ```
+
+`role` and `roles` are surfaced for the frontend's cosmetic affordances only (see §18). The conversion endpoint does not branch on them.
 
 The `WorkOSClient` is constructed lazily on first call to `get_workos_client()` — the SDK validates `api_key` and `client_id` in its constructor, so eager construction would crash any environment without the env vars set.
 
