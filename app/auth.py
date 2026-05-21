@@ -53,6 +53,15 @@ def new_state() -> str:
     return secrets.token_urlsafe(32)
 
 
+def _user_field(user, key):
+    """Read a field off the unsealed user. The v7 SDK types the user on the
+    session-cookie success response as `Dict[str, Any]`, but historically some
+    paths returned a dataclass-like object. Handle both forms."""
+    if isinstance(user, dict):
+        return user.get(key)
+    return getattr(user, key, None)
+
+
 def get_authenticated_user(request: Request) -> dict:
     sealed = request.cookies.get(SESSION_COOKIE_NAME)
     if not sealed:
@@ -77,9 +86,11 @@ def get_authenticated_user(request: Request) -> dict:
 
     user = auth.user
     return {
-        "id": getattr(user, "id", None),
-        "email": getattr(user, "email", None),
-        "first_name": getattr(user, "first_name", None),
-        "last_name": getattr(user, "last_name", None),
+        "id": _user_field(user, "id"),
+        "email": _user_field(user, "email"),
+        "first_name": _user_field(user, "first_name"),
+        "last_name": _user_field(user, "last_name"),
         "organization_id": getattr(auth, "organization_id", None),
+        "role": getattr(auth, "role", None),
+        "roles": list(getattr(auth, "roles", None) or []),
     }

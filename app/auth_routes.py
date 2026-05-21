@@ -154,6 +154,7 @@ def logout(request: Request):
 @router.get("/me")
 def me(request: Request):
     """Returns the current signed-in user, or 401. Used by the frontend
-    header to render the user's email + a Logout link.
+    header to render the OCR backend, the user's role, email, and a Logout
+    link, and to conditionally show the admin-only theme toggle.
     """
-    return get_authenticated_user(request)
+    return {**get_authenticated_user(request), "ocr": settings.OCR}

@@ -316,3 +316,61 @@ header .btn {
   padding: 6px 14px;
   font-size: 13px;
 }
+
+/* Explicit theme overrides — set on <html> by the toggle button JS. Wins over
+   :root and the @media (prefers-color-scheme: dark) block above, so the user's
+   choice persists regardless of OS preference. Unauthenticated pages (sign-in)
+   never set data-theme and so continue to follow OS preference. */
+[data-theme="light"] {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: rgba(37, 99, 235, 0.08);
+  --success: #059669;
+  --success-soft: rgba(5, 150, 105, 0.12);
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.10);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="dark"] {
+  --bg: #0b0d11;
+  --surface: #14171d;
+  --surface-2: #1a1e26;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --border: #232832;
+  --border-strong: #2d333f;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-soft: rgba(59, 130, 246, 0.12);
+  --success: #34d399;
+  --success-soft: rgba(52, 211, 153, 0.15);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.12);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.role-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.page-footer {
+  margin-top: 32px;
+  display: flex;
+  justify-content: center;
+}
