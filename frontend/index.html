@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -32,23 +32,20 @@
     <div class="banner" id="banner"></div>
 
     <footer class="page-footer" id="page-footer" hidden>
-      <button class="btn" id="theme-toggle" type="button">Toggle theme</button>
+      <label class="theme-switch">
+        <span class="theme-switch-side" data-side="light">Light</span>
+        <input type="checkbox" id="theme-switch" class="theme-switch-input" aria-label="Toggle dark mode">
+        <span class="theme-switch-track" aria-hidden="true"><span class="theme-switch-thumb"></span></span>
+        <span class="theme-switch-side" data-side="dark">Dark</span>
+      </label>
     </footer>
   </div>
 
 <script>
-// Theme: apply saved override before anything paints. Light/dark CSS tokens
-// fall back to the @media (prefers-color-scheme) block when no override is
-// set, so a fresh visitor still gets OS-matched theming.
-const root = document.documentElement;
-const saved = localStorage.getItem('theme');
-if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
-document.getElementById('theme-toggle').addEventListener('click', () => {
-  const osDark = matchMedia('(prefers-color-scheme: dark)').matches;
-  const current = root.dataset.theme || (osDark ? 'dark' : 'light');
-  const next = current === 'dark' ? 'light' : 'dark';
-  root.dataset.theme = next;
-  localStorage.setItem('theme', next);
+// Theme: light is the explicit default (set on <html>). The switch flips
+// data-theme between "light" and "dark" — no persistence; refresh resets.
+document.getElementById('theme-switch').addEventListener('change', (e) => {
+  document.documentElement.dataset.theme = e.target.checked ? 'dark' : 'light';
 });
 
 const drop = document.getElementById('drop');

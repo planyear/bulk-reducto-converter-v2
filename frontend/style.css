@@ -191,7 +191,7 @@ h1 {
 
 .btn.primary {
   background: var(--accent);
-  color: #ffffff;
+  color: var(--accent-text, #ffffff);
   border-color: var(--accent);
 }
 
@@ -339,38 +339,114 @@ header .btn {
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.04);
 }
 
+/* 90s-hacker dark mode: dark green-grey surfaces, phosphor-green accents. */
 [data-theme="dark"] {
-  --bg: #0b0d11;
-  --surface: #14171d;
-  --surface-2: #1a1e26;
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-  --border: #232832;
-  --border-strong: #2d333f;
-  --accent: #3b82f6;
-  --accent-hover: #60a5fa;
-  --accent-soft: rgba(59, 130, 246, 0.12);
-  --success: #34d399;
-  --success-soft: rgba(52, 211, 153, 0.15);
-  --danger: #f87171;
-  --danger-soft: rgba(248, 113, 113, 0.12);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --bg: #0e120e;
+  --surface: #161c16;
+  --surface-2: #1c241c;
+  --text: #c4f0c4;
+  --muted: #6e8d6e;
+  --border: #2a3c2a;
+  --border-strong: #3d5a3d;
+  --accent: #39ff14;
+  --accent-hover: #66ff44;
+  --accent-soft: rgba(57, 255, 20, 0.12);
+  --accent-text: #0c1a0c;
+  --success: #5dff5d;
+  --success-soft: rgba(93, 255, 93, 0.12);
+  --danger: #ff6464;
+  --danger-soft: rgba(255, 100, 100, 0.12);
+  --shadow: 0 1px 2px rgba(57, 255, 20, 0.06), 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
+/* Role badge mirrors .ocr-tag / .user-info so the header reads as one row of
+   matching status pills. */
 .role-badge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 10px;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 999px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .page-footer {
   margin-top: 32px;
   display: flex;
   justify-content: center;
+}
+
+/* Theme switch: light label / track-with-thumb / dark label. The native
+   checkbox is visually hidden but stays focusable for keyboard users. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.theme-switch-side {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+
+/* Active side is whichever the current data-theme matches. */
+[data-theme="light"] .theme-switch-side[data-side="light"],
+[data-theme="dark"]  .theme-switch-side[data-side="dark"] {
+  color: var(--text);
+}
+
+.theme-switch-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.theme-switch-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+  box-shadow: var(--shadow);
+}
+
+.theme-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--muted);
+  border-radius: 50%;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.theme-switch-input:checked ~ .theme-switch-track {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.theme-switch-input:checked ~ .theme-switch-track .theme-switch-thumb {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+
+.theme-switch-input:focus-visible ~ .theme-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
